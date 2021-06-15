@@ -1,10 +1,11 @@
 #include <iostream>
 #include <stdio.h>
 #include <mpi.h>
+#include <cstring>
 #include <time.h>
 
 using namespace std;
-const int hastasayi =16;
+const int hastasayi =15;
 
 int notrofil[hastasayi];
 int notrofil_y[hastasayi];
@@ -23,7 +24,7 @@ int bazofil_y[hastasayi];
 
 int toplamhucre[hastasayi];
 
-int toplamislem = 300000*hastasayi;
+int toplamislem = 4000 * hastasayi;
 int islemsay =0;
 
 int hucreUret()
@@ -80,61 +81,69 @@ return 0;
 
 int main(int argc, char** argv)
 {
-	MPI_Init(NULL,NULL);
-	MPI_Comm comm;
-	int gsize, *sendbuf;
-	int root,rbuf[100],i,*displs,*scounts;
+	time_t seed;
+	time(&seed);
+	srand(seed);
 
-	int world_rank, world_size;
-	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-	//MPI_Comm_size(comm, &gsize);
-	//sendbuf = (int *)malloc(gsize*sizeof(int));
-	//displs =(int *)malloc(gsize*sizeof(int));
-	//scounts =(int *)malloc(gsize*sizeof(int));
-
-
+	char idstr[32];
+	char buff[128];
+	int numprocs;
+	int myid;
+	int i;
+	
+	MPI_Status stat; 
+	MPI_Init(NULL,NULL); 
+	MPI_Comm_size(MPI_COMM_WORLD,&numprocs); 
+	MPI_Comm_rank(MPI_COMM_WORLD,&myid);
 	const int ROOT=0;
+
 	int basla = clock();
-	int hasta=0;
-	int hucre=0;
-	int count = toplamislem/(world_size-1);
-	int *localArray =(int *)malloc(count*sizeof(int));
-
-	int local_x = 0;
-	int local_notrofil[hastasayi];
-	int local_lenfosit[hastasayi];
-	int local_monosit[hastasayi];
-	int local_eoizonofil[hastasayi];
-	int local_bazofil[hastasayi];
 
 
-	for(int i=0;i<toplamislem;i++)
+for(int dd=0;dd<toplamislem;dd++)
+{
+	if(myid == 0)
 	{
-		hasta = hastaId();
-		hucre = hucreUret();
-		hesapla(hasta,hucre);
-		//printf("islemci(%d), HastaId(%d), GorselId(%d), KanHucresi(%d) \n",world_rank,hasta,i,hucre);
-		islemsay++;
+	  	for(i=1;i<numprocs;i++)
+	    {
+			int hasta = hastaId();
+			int hucre = hucreUret();
+			hesapla(hasta,hucre);
+			islemsay++;
+			printf("islem(%d), islemci(%d), HastaId(%d), GorselId(%d), KanHucresi(%d) \n",dd,numprocs,hasta,i,hucre);
+			MPI_Send(buff, 128, MPI_CHAR, i, 0, MPI_COMM_WORLD);
+	    }
 
-	}
-	//MPI_Reduce(&local_notrofil,&notrofil,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD);
-
-	MPI_Finalize();
-
-	printf("HastaID        || Sayilan Hucre || Notrofil -- %% Orani  || Lenfosit -- %% Orani || Monosit -- %% Orani || Eoizonofil -- %% Orani  || \n");
-	printf("________________________________________________________________________________________________________________\n");
-	yuzdelerihesapla();
-
-	for(int i=0;i<hastasayi;i++)
+	    for(i=1;i<numprocs;i++)
+	    {
+	      MPI_Recv(buff, 128, MPI_CHAR, i, 0, MPI_COMM_WORLD, &stat);
+	    }
+	}else
 	{
-	printf("%d            || %d             || %d -- %% %d       || %d -- %% %d     || %d -- %% %d      || %d -- %% %d      || %d -- %% %d     || \n",i+1,toplamhucre[i],notrofil[i],notrofil_y[i],lenfosit[i],lenfosit_y[i],monosit[i],monosit_y[i],eoizonofil[i],eoizonofil_y[i],bazofil[i],bazofil_y[i]);
+		MPI_Recv(buff, 128, MPI_CHAR, 0, 0, MPI_COMM_WORLD, &stat);
+	    MPI_Send(buff, 128, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+	}
+}
 
+	
+	MPI_Comm_rank(MPI_COMM_WORLD,&myid); //Bu blogu sadece Master calistirsin.
+	if(myid==0)
+	{
+		printf("HastaID        || Sayilan Hucre || Notrofil -- %% Orani  || Lenfosit -- %% Orani || Monosit -- %% Orani || Eoizonofil -- %% Orani  || \n");
+		printf("________________________________________________________________________________________________________________\n");
+		yuzdelerihesapla();
+
+		for(int i=0;i<hastasayi;i++)
+		{
+			printf("%d            || %d             || %d -- %% %d       || %d -- %% %d     || %d -- %% %d      || %d -- %% %d      || %d -- %% %d     || \n",i+1,toplamhucre[i],notrofil[i],notrofil_y[i],lenfosit[i],lenfosit_y[i],monosit[i],monosit_y[i],eoizonofil[i],eoizonofil_y[i],bazofil[i],bazofil_y[i]);
+		}
+
+		printf("_________________________________________________________________________________________________________________\n");
+
+		printf("Tamamlanma suresi: %ld Milisaniye \n", (clock()-basla));
 	}
 
-	printf("_________________________________________________________________________________________________________________\n");
-
-	printf("Tamamlanma suresi: %ld Milisaniye \n", (clock()-basla));
+ MPI_Finalize();
 
    return 0;
 }
